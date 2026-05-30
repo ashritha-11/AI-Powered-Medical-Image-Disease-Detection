@@ -16,21 +16,24 @@ st.set_page_config(
 )
 
 # =====================================
-# MODEL DOWNLOAD
+# MODEL CONFIG
 # =====================================
 
 MODEL_FILE = "cnn_model.h5"
+FILE_ID = "1I5V92KD5efDyJOrUdKS0F4iPmKnPGFnd"
+
+# =====================================
+# DOWNLOAD MODEL
+# =====================================
 
 @st.cache_resource
 def download_model():
 
     if not os.path.exists(MODEL_FILE):
 
-        file_id = "1I5V92KD5efDyJOrUdKS0F4iPmKnPGFnd"
+        url = f"https://drive.google.com/uc?id={FILE_ID}"
 
-        url = f"https://drive.google.com/uc?id={file_id}"
-
-        with st.spinner("Downloading AI Model..."):
+        with st.spinner("Downloading AI model..."):
             gdown.download(url, MODEL_FILE, quiet=False)
 
 download_model()
@@ -41,38 +44,39 @@ download_model()
 
 @st.cache_resource
 def load_model():
-    return tf.keras.models.load_model(MODEL_FILE)
 
-try:
-    model = load_model()
-except Exception as e:
-    st.error(f"Model Loading Error: {e}")
+    try:
+        model = tf.keras.models.load_model(
+            MODEL_FILE,
+            compile=False
+        )
+        return model
+
+    except Exception as e:
+        st.error("❌ Model Loading Failed")
+        st.error(str(e))
+        return None
+
+model = load_model()
+
+if model is None:
     st.stop()
 
 # =====================================
-# IMAGE SETTINGS
+# IMAGE SIZE
 # =====================================
 
 IMG_SIZE = 150
 
 # =====================================
-# HEADER
+# UI
 # =====================================
 
 st.title("🫁 AI-Powered Pneumonia Detection")
 
 st.markdown("""
-Upload a **Chest X-Ray Image** and let the AI determine whether the patient has:
-
-- ✅ Normal Lungs
-- ⚠️ Pneumonia
-
-Powered by Deep Learning (CNN)
+Upload a chest X-ray image and let the CNN model predict whether pneumonia is present.
 """)
-
-# =====================================
-# FILE UPLOAD
-# =====================================
 
 uploaded_file = st.file_uploader(
     "Upload X-Ray Image",
@@ -106,41 +110,34 @@ if uploaded_file is not None:
         (IMG_SIZE, IMG_SIZE)
     )
 
-    image = image / 255.0
+    image = image.astype("float32") / 255.0
 
-    image = image.reshape(
-        1,
-        IMG_SIZE,
-        IMG_SIZE,
-        1
-    )
+    image = np.expand_dims(image, axis=-1)
+    image = np.expand_dims(image, axis=0)
 
     with st.spinner("Analyzing X-Ray..."):
+
         prediction = model.predict(
             image,
             verbose=0
-        )[0][0]
+        )
 
-    st.subheader("Prediction Result")
+        score = float(prediction[0][0])
 
-    if prediction > 0.5:
+    st.subheader("Prediction")
 
-        confidence = prediction * 100
+    if score > 0.5:
 
         st.error("⚠️ Pneumonia Detected")
-
         st.metric(
             "Confidence",
-            f"{confidence:.2f}%"
+            f"{score * 100:.2f}%"
         )
 
     else:
 
-        confidence = (1 - prediction) * 100
-
         st.success("✅ Normal")
-
         st.metric(
             "Confidence",
-            f"{confidence:.2f}%"
+            f"{(1 - score) * 100:.2f}%"
         )
